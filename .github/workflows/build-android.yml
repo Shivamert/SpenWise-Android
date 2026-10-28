@@ -1,11 +1,15 @@
+
 name: Build SpendWise Android APK
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - "SpendWise-Native-Android-Project (2).zip"
-      - ".github/workflows/build-android.yml"
+      - 'SpendWise-Native-Android-Project*.zip'
+      - '.github/workflows/build-android.yml'
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -19,40 +23,77 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-
-      - name: Extract Android project
-        run: |
-          mkdir -p extracted
-          unzip -o SpendWise-Native-Android-Project (2).zip -d extracted
-          FILE=$(find extracted -name settings.gradle.kts -print -quit)
-          if [ -z "$FILE" ]; then
-            echo "ERROR: settings.gradle.kts was not found in the ZIP."
-            find extracted -maxdepth 4 -type f
-            exit 1
-          fi
-          echo "PROJECT_DIR=$(dirname "$FILE")" >> "$GITHUB_ENV"
+        uses: android-actions/setup-android@v3
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.11.1"
+          gradle-version: '8.11.1'
+
+      - name: Find and extract Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ZIP_FILE="$(find . -maxdepth 1 -type f -name 'SpendWise-Native-Android-Project*.zip' -print -quit)"
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No SpendWise project ZIP found in repository root."
+            exit 1
+          fi
+
+          echo "Using ZIP: $ZIP_FILE"
+          mkdir -p extracted
+          unzip -q "$ZIP_FILE" -d extracted
+
+          SETTINGS_FILE="$(find extracted -type f -name settings.gradle.kts -print -quit)"
+
+          if [ -z "$SETTINGS_FILE" ]; then
+            SETTINGS_FILE="$(find extracted -type f -name settings.gradle -print -quit)"
+          fi
+
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: Gradle settings file not found in ZIP."
+            find extracted -maxdepth 4 -type f -print
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
+
+          if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ] && [ ! -f "$PROJECT_DIR/app/build.gradle" ]; then
+            echo "ERROR: Android app Gradle file not found."
+            echo "Project directory: $PROJECT_DIR"
+            find "$PROJECT_DIR" -maxdepth 3 -type f -print
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Project directory found: $PROJECT_DIR"
 
       - name: Build debug APK
+        shell: bash
         run: |
+          set -euo pipefail
           gradle -p "$PROJECT_DIR" :app:assembleDebug --no-daemon --stacktrace
 
       - name: Find APK
+        shell: bash
         run: |
-          APK=$(find "$PROJECT_DIR" -type f -name '*debug.apk' -print -quit)
-          if [ -z "$APK" ]; then
-            echo "ERROR: No debug APK was generated."
+          set -euo pipefail
+
+          APK_PATH="$(find "$PROJECT_DIR" -type f -name '*debug.apk' -print -quit)"
+
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: Build finished without a debug APK."
+            find "$PROJECT_DIR" -type f -name '*.apk' -print
             exit 1
           fi
-          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+
+          echo "APK_PATH=$APK_PATH" >> "$GITHUB_ENV"
+          echo "APK found: $APK_PATH"
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
@@ -60,4 +101,3 @@ jobs:
           name: SpendWise-debug-APK
           path: ${{ env.APK_PATH }}
           if-no-files-found: error
-          
