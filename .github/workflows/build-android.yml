@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "SpendWise-Native-Android-Project (1).zip"
+      - "SpendWise-Native-Android-Project (2).zip"
       - ".github/workflows/build-android.yml"
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
       - name: Extract Android project
         run: |
           mkdir -p extracted
-          unzip -o SpendWise-Native-Android-Project (1).zip -d extracted
+          unzip -o SpendWise-Native-Android-Project (2).zip -d extracted
           FILE=$(find extracted -name settings.gradle.kts -print -quit)
           if [ -z "$FILE" ]; then
             echo "ERROR: settings.gradle.kts was not found in the ZIP."
